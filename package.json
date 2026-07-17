@@ -4,6 +4,9 @@
   "description": "RoadResQ production backend — Express, MongoDB Atlas, Firebase Auth, Socket.IO",
   "main": "api/index.js",
   "type": "commonjs",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "start": "node api/index.js",
     "dev": "nodemon api/index.js"
