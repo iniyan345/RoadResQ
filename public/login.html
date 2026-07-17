@@ -2373,9 +2373,10 @@
        All mock_token logic has been removed.
     ============================================================ */
 
+    const RR_BACKEND_URL = ''; // <-- set your Render backend URL here if frontend is hosted separately (must match index.html)
     const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       ? `${window.location.protocol}//${window.location.hostname}:5000`
-      : '';
+      : RR_BACKEND_URL;
 
     function toast(msg, type = '') {
       const t = document.createElement('div');
@@ -2418,8 +2419,11 @@
 
     async function initFirebase() {
       try {
+        if (typeof firebase === 'undefined') {
+          throw new Error('Firebase SDK scripts (/vendor/firebase/*) did not load — check that the server is running and node_modules/firebase is installed, or that /vendor/firebase is reachable from this origin.');
+        }
         const res = await fetch(API_BASE + '/api/config/firebase');
-        if (!res.ok) throw new Error('Config endpoint returned ' + res.status);
+        if (!res.ok) throw new Error(`Config endpoint returned ${res.status} from ${API_BASE || '(same origin)'} — check RR_BACKEND_URL and that your backend is running.`);
         const json = await res.json();
         if (!json.success) throw new Error(json.message);
         const cfg = json.data;

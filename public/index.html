@@ -379,6 +379,7 @@
           </div>
           <div class="timeline" id="timeline"></div>
         </div>
+        <div id="trackMap"></div>
         <button class="btn btn-outline" id="restartTrack">↻ Simulate New Request</button>
       </div>
     </section>
@@ -448,10 +449,25 @@
   <script>
     /* ============ BACKEND INTEGRATION ============
        Real Firebase Authentication — no mock tokens.
+
+       ── If your frontend and backend are on the SAME origin (e.g. this
+          whole app deployed as one Render web service that both serves
+          public/ and runs the API), leave RR_BACKEND_URL as ''.
+
+       ── If your frontend is hosted separately from your Render backend
+          (e.g. frontend on Vercel/Netlify/GitHub Pages, backend on
+          Render), set RR_BACKEND_URL below to your Render URL, e.g.:
+            const RR_BACKEND_URL = 'https://roadresq-api.onrender.com';
+          Without this, every API call, the Firebase config fetch, and
+          the Socket.IO connection silently target the WRONG origin in
+          production — which looks exactly like "Google auth doesn't
+          work" / "tracking doesn't work" / "nearby shops don't load",
+          because none of those requests ever reach your real backend.
     */
+    const RR_BACKEND_URL = ''; // <-- set your Render backend URL here if frontend is hosted separately
     const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       ? `${window.location.protocol}//${window.location.hostname}:5000`
-      : '';
+      : RR_BACKEND_URL;
 
     // Current valid Firebase ID token (refreshed automatically)
     let _authToken = localStorage.getItem('roadresq_token') || null;
@@ -590,11 +606,13 @@
         }
       });
       _socket.on('provider:location', data => {
-        // Update map marker if tracker is open
-        if (providerMarker && data.lat && data.lng) {
-          providerMarker.setLatLng([data.lat, data.lng]);
-          if (mapFindInst) mapFindInst.panTo([data.lat, data.lng]);
-        }
+        // Real GPS update from a provider's app — stop the simulated fallback
+        // and move the actual marker on the live tracking map.
+        if (data.lat == null || data.lng == null) return;
+        clearInterval(simTrackTimer);
+        if (!mapTrackInst) initTrackMap({ lat: data.lat, lng: data.lng });
+        if (providerMarker) providerMarker.setLatLng([data.lat, data.lng]);
+        if (mapTrackInst) mapTrackInst.panTo([data.lat, data.lng]);
       });
     }
 
@@ -738,11 +756,13 @@
     /* Fetch real providers from backend; falls back silently to mock array */
     async function fetchNearbyProviders() {
       if (!userLocation) return;
-      const data = await apiGet(
+      const res = await apiGet(
         `/api/providers/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radiusKm=20`
       );
-      if (data && data.providers && data.providers.length) {
-        data.providers.forEach(bp => {
+      // Backend responds with { success, data: { providers } } — unwrap correctly.
+      const list = res && res.success ? res.data?.providers : null;
+      if (list && list.length) {
+        list.forEach(bp => {
           const existing = providers.find(p => p._id === bp._id || p.name === bp.name);
           if (!existing) {
             providers.push({
@@ -760,7 +780,7 @@
             });
           }
         });
-        toast(`Loaded ${data.providers.length} live providers from network.`, 'success');
+        toast(`Loaded ${list.length} live providers from network.`, 'success');
       }
     }
 
@@ -779,6 +799,7 @@
       document.getElementById('fabSos').classList.toggle('hidden', name === 'sos');
       if (name === 'find') { setTimeout(() => { if (mapFindInst) mapFindInst.invalidateSize(); document.getElementById('findSearch')?.focus(); }, 80); }
       if (name === 'dashboard') setTimeout(() => { if (mapDashInst) mapDashInst.invalidateSize(); }, 80);
+      if (name === 'tracker') setTimeout(() => { if (mapTrackInst) mapTrackInst.invalidateSize(); }, 80);
     }
     document.querySelectorAll('[data-view]').forEach(el => {
       el.addEventListener('click', (e) => { e.preventDefault(); setView(el.dataset.view); });
@@ -1025,7 +1046,7 @@
       renderMapMarkers(list);
     }
 
-    let mapFindInst, mapDashInst, markersLayer, providerMarker;
+    let mapFindInst, mapDashInst, mapTrackInst, markersLayer, providerMarker, userTrackMarker, simTrackTimer;
     function initMaps() {
       mapFindInst = L.map('mapFind', { zoomControl: true }).setView(CENTER, 12);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mapFindInst);
@@ -1094,7 +1115,7 @@
       document.querySelectorAll('.floating-card').forEach(c => c.classList.add('show'));
       toast(`Request sent to ${p.name}. Tracking started.`, 'success');
       setView('tracker');
-      startTracker(p.eta);
+      startTracker(p.eta, p);
 
       // Submit to backend — works with or without location
       if (_authToken) {
@@ -1122,6 +1143,13 @@
           if (assignedProvider) {
             document.getElementById('providerAssigned').textContent =
               `Provider: ${assignedProvider.name} · 📞 ${assignedProvider.phone}`;
+            // Real assigned provider from MongoDB — swap the demo map coords
+            // for its actual location so live tracking reflects reality.
+            const coords = assignedProvider.location?.coordinates;
+            if (coords && coords.length === 2) {
+              const { start, dest } = initTrackMap({ name: assignedProvider.name, lat: coords[1], lng: coords[0] });
+              simulateProviderMovement(start, dest, (resp.data.request.etaMinutes || p.eta || 8) * 60);
+            }
           }
           toast(`Request ${realId} confirmed — provider notified.`, 'success');
         } else if (resp && !resp.success) {
@@ -1266,7 +1294,51 @@
         tl.appendChild(el('div', 'tl-item ' + cls, `<div class="tl-dot"></div><div class="tl-content"><h4>${s.t}</h4><p>${s.d}</p></div>`));
       });
     }
-    function startTracker(etaMin) {
+    // Builds/refreshes the live tracking map with a provider marker (moving)
+    // and a user marker (fixed at the rider's known/last location).
+    function initTrackMap(provider) {
+      const dest = userLocation || { lat: CENTER[0], lng: CENTER[1] };
+      const start = { lat: provider.lat, lng: provider.lng };
+
+      if (!mapTrackInst) {
+        mapTrackInst = L.map('trackMap', { zoomControl: true }).setView([start.lat, start.lng], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mapTrackInst);
+      }
+      if (providerMarker) { mapTrackInst.removeLayer(providerMarker); providerMarker = null; }
+      if (userTrackMarker) { mapTrackInst.removeLayer(userTrackMarker); userTrackMarker = null; }
+
+      providerMarker = L.circleMarker([start.lat, start.lng], {
+        radius: 9, color: '#ff6a2b', fillColor: '#ffc93c', fillOpacity: 0.95, weight: 2,
+      }).addTo(mapTrackInst).bindPopup(`${provider.name || 'Provider'} — on the way`).openPopup();
+
+      userTrackMarker = L.circleMarker([dest.lat, dest.lng], {
+        radius: 9, color: '#35c58b', fillColor: '#35c58b', fillOpacity: 0.3, weight: 2,
+      }).addTo(mapTrackInst).bindPopup('You are here');
+
+      mapTrackInst.fitBounds([[start.lat, start.lng], [dest.lat, dest.lng]], { padding: [40, 40] });
+      setTimeout(() => mapTrackInst.invalidateSize(), 60);
+      return { start, dest };
+    }
+
+    // Moves the provider marker toward the rider each tick. This runs only
+    // until a real 'provider:location' socket event arrives (see the socket
+    // handler above), at which point the real GPS feed takes over.
+    function simulateProviderMovement(start, dest, totalSeconds) {
+      clearInterval(simTrackTimer);
+      const steps = Math.max(10, Math.round(totalSeconds / 3));
+      let step = 0;
+      simTrackTimer = setInterval(() => {
+        step++;
+        const t = Math.min(1, step / steps);
+        const lat = start.lat + (dest.lat - start.lat) * t;
+        const lng = start.lng + (dest.lng - start.lng) * t;
+        if (providerMarker) providerMarker.setLatLng([lat, lng]);
+        if (mapTrackInst) mapTrackInst.panTo([lat, lng]);
+        if (t >= 1) clearInterval(simTrackTimer);
+      }, 3000);
+    }
+
+    function startTracker(etaMin, provider) {
       clearInterval(trackerTimer);
       let stageIdx = 0;
       let secondsLeft = (etaMin || 8) * 60;
@@ -1284,6 +1356,15 @@
         }
         if (stageIdx >= stages.length - 1 && secondsLeft <= 0) { clearInterval(trackerTimer); }
       }, 500);
+
+      const p = provider || providers[Math.floor(Math.random() * providers.length)];
+      if (p) {
+        const { start, dest } = initTrackMap(p);
+        // Real-time updates from an actual provider device take over via the
+        // 'provider:location' socket listener; this simulation just keeps the
+        // map moving in the meantime so tracking isn't a static pin.
+        simulateProviderMovement(start, dest, etaMin ? etaMin * 60 : 480);
+      }
     }
     function updateEta(sec) {
       const m = Math.floor(sec / 60), s = sec % 60;
@@ -1293,9 +1374,9 @@
       const p = providers[Math.floor(Math.random() * providers.length)];
       document.getElementById('reqId').textContent = 'RR-' + Math.floor(20000 + Math.random() * 9000);
       document.getElementById('providerAssigned').textContent = `Provider: ${p.name.split(' ')[0]} Team — ${p.name} · 📞 ${p.phone}`;
-      startTracker(p.eta);
+      startTracker(p.eta, p);
     });
-    startTracker(8);
+    renderTimeline(0); // static placeholder until a real request starts the tracker
 
     /* ============ SOS ============ */
     const sosOptions = [

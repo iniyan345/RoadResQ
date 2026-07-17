@@ -864,12 +864,18 @@
 
     /* map */
     #mapFind,
-    #mapDash {
+    #mapDash,
+    #trackMap {
       border-radius: 14px;
       height: 460px;
       width: 100%;
       border: 1px solid var(--line);
       filter: saturate(0.5) brightness(0.75) contrast(1.1);
+    }
+
+    #trackMap {
+      height: 320px;
+      margin: 18px 0;
     }
 
     .leaflet-popup-content-wrapper {
