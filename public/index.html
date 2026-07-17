@@ -1,0 +1,1425 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RoadResQ — Roadside Help, On the Way</title>
+  <meta name="description"
+    content="RoadResQ connects you to the nearest mechanic, puncture shop, towing van or ambulance in seconds — with live tracking and one-tap SOS.">
+  <meta name="theme-color" content="#14161a">
+  <meta property="og:title" content="RoadResQ — Roadside Help, On the Way">
+  <meta property="og:description"
+    content="Instant roadside assistance with live tracking. Mechanics, towing, fuel, ambulance — one tap away.">
+  <meta property="og:type" content="website">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect fill='%23ff6a2b' x='10' y='10' width='12' height='12' transform='rotate(45 16 16)'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <!-- Firebase SDK served locally from node_modules (no internet required) -->
+  <script src="/vendor/firebase/firebase-app-compat.js"></script>
+  <script src="/vendor/firebase/firebase-auth-compat.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    try {
+      if (typeof tailwind !== 'undefined') {
+        tailwind.config = {
+          theme: {
+            extend: {
+              fontFamily: { jakarta: ['Plus Jakarta Sans', 'Inter', 'sans-serif'] },
+              colors: { obsidian: '#161A22', slate: '#1F242D', hazard: '#FF6B2C', go: '#00D26A', danger: '#FF4D4F', muted2: '#BFC7D5' }
+            }
+          }
+        };
+      }
+    } catch (_) { /* Tailwind CDN unavailable — inline CSS still applies */ }
+  </script>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <script>
+    // Auth guard — redirects to login if no session token present.
+    // The full Firebase verification happens asynchronously below.
+    if (!localStorage.getItem('roadresq_token') || !localStorage.getItem('roadresq_uid')) {
+      window.location.href = 'login.html';
+    }
+  </script>
+
+
+  <a href="#main-content" class="skip-link">Skip to content</a>
+
+  <div class="chevron-strip"></div>
+
+  <nav>
+    <div class="nav-inner">
+      <div class="logo"><span class="dot"></span>ROADRESQ</div>
+      <div class="nav-links" id="navLinks">
+        <button data-view="home" class="active">Home</button>
+        <button data-view="find">Find Help</button>
+        <button data-view="dashboard">Dashboard</button>
+        <button data-view="tracker">Tracker</button>
+        <button data-view="sos">SOS</button>
+      </div>
+      <div class="nav-cta">
+        <div class="live-ticker" id="liveTicker"><span class="pulse-dot"></span> <span id="liveCount">340</span>
+          providers online</div>
+        <button class="btn btn-outline btn-sm" id="logoutBtn">Log Out</button>
+        <button class="btn btn-hazard btn-sm" data-view="find">Get Help Now</button>
+        <button class="hamburger" id="hamburger">☰</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============ HOME ============ -->
+  <div class="view active" id="view-home">
+    <section class="hero reveal" style="padding-top:80px;" id="main-content">
+      <div class="hero-grid">
+        <div>
+          <div class="eyebrow">24/7 Roadside Network</div>
+          <h1>Stranded on the road?<br>Get <span class="hl">instant help</span>, fast.</h1>
+          <p class="lead">RoadResQ connects you to the nearest mechanic, puncture shop, towing van or ambulance in
+            seconds — with live tracking so you know exactly when help arrives.</p>
+          <div class="hero-ctas">
+            <button class="btn btn-hazard" data-view="find">⚡ Get Help Now</button>
+            <button class="btn btn-outline" data-view="find">Explore Services</button>
+            <button class="btn btn-outline" data-view="tracker">Track Assistance</button>
+          </div>
+          <div class="stat-gauges">
+            <div class="gauge">
+              <div class="num" data-count="1240">0</div>
+              <div class="lbl">Mechanics</div>
+            </div>
+            <div class="gauge">
+              <div class="num" data-count="8600">0</div>
+              <div class="lbl">Rescues Served</div>
+            </div>
+            <div class="gauge">
+              <div class="num" data-count="11" data-suffix=" min">0</div>
+              <div class="lbl">Avg Response</div>
+            </div>
+            <div class="gauge">
+              <div class="num" data-count="340">0</div>
+              <div class="lbl">Live Locations</div>
+            </div>
+          </div>
+        </div>
+        <div class="dash-visual premium-tracker">
+          <div class="tracker-rings">
+            <div class="ring r1"></div>
+            <div class="ring r2"></div>
+            <div class="ring r3"></div>
+            <div class="tracker-center">
+              <div class="big mono" id="etaCount">08<span class="min">m</span></div>
+              <div class="small">To Arrival</div>
+            </div>
+          </div>
+
+          <div class="floating-card fc-top">
+            <div class="fc-avatar">
+              <img src="https://ui-avatars.com/api/?name=Ravi+K&background=FF6B2C&color=fff&bold=true" alt="Ravi">
+            </div>
+            <div class="fc-info">
+              <span class="title">Mechanic Assigned</span>
+              <span class="name">Ravi Kumar</span>
+            </div>
+          </div>
+
+          <div class="floating-card fc-bottom">
+            <div class="fc-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                <circle cx="12" cy="10" r="3"></circle>
+              </svg>
+            </div>
+            <div class="fc-info">
+              <span class="title">Live Tracking</span>
+              <span class="name">Locating shop...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="reveal">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">The Flow</div>
+          <h2>How RoadResQ works</h2>
+          <p>From breakdown to back-on-the-road — five steps, built for stressful moments.</p>
+        </div>
+        <div class="steps">
+          <div class="step">
+            <div class="n">01</div>
+            <h4>Detect location</h4>
+            <p>We pinpoint exactly where you're stranded, automatically.</p>
+          </div>
+          <div class="step">
+            <div class="n">02</div>
+            <h4>Choose your issue</h4>
+            <p>Puncture, breakdown, fuel, accident — tell us what's wrong.</p>
+          </div>
+          <div class="step">
+            <div class="n">03</div>
+            <h4>Find nearby services</h4>
+            <p>See real providers ranked by distance and availability.</p>
+          </div>
+          <div class="step">
+            <div class="n">04</div>
+            <h4>Request help</h4>
+            <p>Call directly or send a request in one tap.</p>
+          </div>
+          <div class="step">
+            <div class="n">05</div>
+            <h4>Track live</h4>
+            <p>Watch your provider's ETA update in real time.</p>
+          </div>
+        </div>
+        <div class="breakdown-wizard" id="breakdownWizard">
+          <h3>Not sure what's wrong?</h3>
+          <p>Tap your situation — we'll route you to the right help instantly.</p>
+          <div class="wizard-options" id="wizardOptions"></div>
+          <div class="wizard-result" id="wizardResult"></div>
+        </div>
+      </div>
+    </section>
+
+    <section style="background:var(--asphalt-2);">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">Services We Provide</div>
+          <h2>Every kind of roadside help, one place</h2>
+        </div>
+        <div class="grid-4" id="servicesGrid"></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">Nearby Right Now</div>
+          <h2>Support already around you</h2>
+          <p>A live preview of providers near your current area — open the full map to filter and request help.</p>
+        </div>
+        <div class="grid-3" id="nearbyPreview"></div>
+        <div style="text-align:center;margin-top:32px;">
+          <button class="btn btn-hazard" data-view="find">View Full Map →</button>
+        </div>
+      </div>
+    </section>
+
+    <section style="background:var(--asphalt-2);">
+      <div class="wrap">
+        <div class="grid-2" style="align-items:center;gap:60px;">
+          <div>
+            <div class="eyebrow">Why RoadResQ</div>
+            <h2 style="font-size:34px;margin-bottom:10px;">Built for the moment things go wrong</h2>
+          </div>
+          <div>
+            <div class="why-row">
+              <div class="num">01</div>
+              <div>
+                <h4>Fast emergency response</h4>
+                <p>Average provider assignment under 60 seconds.</p>
+              </div>
+            </div>
+            <div class="why-row">
+              <div class="num">02</div>
+              <div>
+                <h4>Location-based accuracy</h4>
+                <p>Ranked strictly by real distance and live availability.</p>
+              </div>
+            </div>
+            <div class="why-row">
+              <div class="num">03</div>
+              <div>
+                <h4>All services, one app</h4>
+                <p>Mechanics, towing, fuel, and ambulance — no juggling numbers.</p>
+              </div>
+            </div>
+            <div class="why-row">
+              <div class="num">04</div>
+              <div>
+                <h4>Calm, simple interface</h4>
+                <p>Designed to be usable with shaking hands and a racing mind.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="section-head" style="margin-bottom:36px;">
+          <div class="eyebrow">Real Situations</div>
+          <h2>Where RoadResQ actually helps</h2>
+        </div>
+        <div class="grid-4" id="scenarioGrid"></div>
+      </div>
+    </section>
+
+    <section style="background:var(--asphalt-2);">
+      <div class="wrap" style="max-width:760px;">
+        <div class="eyebrow">Trusted on the road</div>
+        <h2 style="font-size:30px;margin-bottom:30px;">What riders say</h2>
+        <div class="testi-track" id="testiTrack"></div>
+        <div class="testi-dots" id="testiDots"></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap" style="max-width:760px;">
+        <div class="eyebrow">Questions</div>
+        <h2 style="font-size:30px;margin-bottom:20px;">Frequently asked</h2>
+        <div id="faqList"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ DASHBOARD ============ -->
+  <div class="view" id="view-dashboard">
+    <section style="padding-top:44px;">
+      <div class="wrap">
+        <div class="welcome-card">
+          <div>
+            <div class="eyebrow" style="margin-bottom:8px;">Welcome back</div>
+            <h2 style="font-size:24px;" id="dashUserName">Hey, Rider 👋</h2>
+          </div>
+          <button class="loc-pill" id="locBtn">📍 Detect my location</button>
+        </div>
+
+        <div class="search-bar">
+          <input type="text" id="dashSearch"
+            placeholder="Find nearby mechanics, puncture shops, fuel stations, towing services…">
+          <button class="btn btn-hazard" id="dashSearchBtn">Search</button>
+        </div>
+
+        <div class="quick-grid" id="quickActions"></div>
+
+        <div class="dash-cols">
+          <div>
+            <div class="panel">
+              <h3>Map Preview</h3>
+              <div id="mapDash"></div>
+            </div>
+          </div>
+          <div>
+            <div class="panel">
+              <h3>Recent Requests</h3>
+              <div id="recentRequests"></div>
+            </div>
+            <div class="panel">
+              <h3>Saved Contacts</h3>
+              <div id="savedContacts"></div>
+            </div>
+            <div class="panel">
+              <h3>Live Service Status</h3>
+              <div style="display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--muted);">
+                <span class="pulse-dot"></span> All systems normal — 340 active locations nearby
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ FIND / MAP ============ -->
+  <div class="view" id="view-find">
+    <section style="padding-top:44px;">
+      <div class="wrap">
+        <div class="section-head" style="margin-bottom:28px;">
+          <div class="eyebrow">Live Map</div>
+          <h2 style="font-size:32px;">Find nearby help</h2>
+          <p>Filter by category, tap a marker, and request help in one move.</p>
+        </div>
+        <div class="filter-row" id="filterRow" style="margin-bottom:12px;"></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+          <input type="search" class="find-search" id="findSearch" placeholder="Search by name or area…"
+            aria-label="Search providers">
+        </div>
+        <div class="sort-hint" id="sortHint">Showing providers near Bengaluru · <button type="button"
+            id="useMyLocation">Use my location</button></div>
+        <div class="grid-2" style="grid-template-columns:1.3fr 1fr;align-items:start;gap:24px;margin-bottom:20px;">
+          <div id="mapFind"></div>
+          <div style="max-height:460px;overflow-y:auto;padding-right:4px;display:flex;flex-direction:column;gap:14px;"
+            id="providerListSide"></div>
+        </div>
+        <div class="grid-3" id="providerGrid"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ TRACKER ============ -->
+  <div class="view" id="view-tracker">
+    <section style="padding-top:44px;">
+      <div class="wrap" style="max-width:760px;">
+        <div class="section-head" style="margin-bottom:28px;">
+          <div class="eyebrow">Live Tracking</div>
+          <h2 style="font-size:32px;">Your assistance, in real time</h2>
+        </div>
+        <div class="tracker-card">
+          <div class="tracker-top">
+            <div>
+              <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Request ID
+              </div>
+              <div class="mono" style="font-size:16px;font-weight:700;" id="reqId">RR-28451</div>
+              <div style="font-size:13px;color:var(--muted);margin-top:6px;" id="providerAssigned">Provider: Ravi Kumar
+                — Kumar Auto Works · 📞 +91 98450 12233</div>
+            </div>
+            <div class="eta-box">
+              <div class="num mono" id="etaLive">08:00</div>
+              <div class="lbl">ETA remaining</div>
+            </div>
+          </div>
+          <div class="timeline" id="timeline"></div>
+        </div>
+        <button class="btn btn-outline" id="restartTrack">↻ Simulate New Request</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ SOS ============ -->
+  <div class="view" id="view-sos">
+    <section style="padding-top:44px;">
+      <div class="wrap" style="max-width:900px;">
+        <div class="sos-hero">
+          <div class="eyebrow" style="justify-content:center;display:inline-flex;">Emergency Panel</div>
+          <h2 style="font-size:30px;margin-bottom:26px;">One tap. Immediate help.</h2>
+          <button class="sos-btn" id="sosBtn">SOS</button>
+          <div class="sos-status" id="sosStatus">Tap to alert emergency contacts &amp; share your live location</div>
+        </div>
+        <div class="alert-banner" id="sosAlert">🚨 SOS activated — location shared, emergency contact notified.</div>
+        <div class="sos-grid" id="sosGrid"></div>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <div class="foot-grid">
+      <div>
+        <div class="logo" style="margin-bottom:14px;"><span class="dot"></span>ROADRESQ</div>
+        <p style="max-width:280px;">Smart roadside emergency assistance — find help, track help, get moving again.</p>
+      </div>
+      <div>
+        <h5>Quick Links</h5>
+        <a data-view="home">Home</a><a data-view="find">Find Help</a><a data-view="dashboard">Dashboard</a><a
+          data-view="tracker">Tracker</a>
+      </div>
+      <div>
+        <h5>Emergency</h5>
+        <a href="tel:112">Police — 112</a><a href="tel:108">Ambulance — 108</a><a href="tel:1073">Highway Patrol —
+          1073</a>
+      </div>
+      <div>
+        <h5>Legal</h5>
+        <a href="#">Privacy Policy</a><a href="#">Terms of Service</a><a href="#">Contact</a>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 RoadResQ. Built for the road ahead.</span>
+      <span>Backend: Express + MongoDB Atlas + Firebase Auth + Socket.IO · <a style="color:var(--hazard);"
+          href="/health" target="_blank">API Health ↗</a></span>
+    </div>
+  </footer>
+
+  <button class="fab-sos" id="fabSos" aria-label="Emergency SOS" title="Emergency SOS (press E)">SOS</button>
+  <button class="scroll-top" id="scrollTop" aria-label="Back to top">↑</button>
+  <div class="toast-wrap" id="toastWrap" aria-live="polite"></div>
+  <div class="kbd-hint" id="kbdHint"><kbd>E</kbd> SOS · <kbd>/</kbd> Search · <kbd>1-5</kbd> Navigate</div>
+
+  <div class="modal-overlay" id="requestModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal">
+      <h3 id="modalTitle">Confirm help request</h3>
+      <p id="modalDesc">You're about to request assistance from this provider.</p>
+      <div class="modal-meta" id="modalMeta"></div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" id="modalCancel">Cancel</button>
+        <button class="btn btn-hazard" id="modalConfirm">Confirm &amp; Track</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ============ BACKEND INTEGRATION ============
+       Real Firebase Authentication — no mock tokens.
+    */
+    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? `${window.location.protocol}//${window.location.hostname}:5000`
+      : '';
+
+    // Current valid Firebase ID token (refreshed automatically)
+    let _authToken = localStorage.getItem('roadresq_token') || null;
+    let _firebaseAuth = null;
+
+    async function apiGet(path) {
+      try {
+        const headers = {};
+        if (_authToken) headers['Authorization'] = 'Bearer ' + _authToken;
+        const r = await fetch(API_BASE + path, { headers });
+        if (r.status === 401) { signOut(); return null; }
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      } catch (e) { console.warn('[api] GET', path, e.message); return null; }
+    }
+
+    async function apiPost(path, body) {
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (_authToken) headers['Authorization'] = 'Bearer ' + _authToken;
+        const r = await fetch(API_BASE + path, { method: 'POST', headers, body: JSON.stringify(body) });
+        if (r.status === 401) { signOut(); return null; }
+        return r.json();
+      } catch (e) { console.warn('[api] POST', path, e.message); return null; }
+    }
+
+    async function apiPatch(path, body) {
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (_authToken) headers['Authorization'] = 'Bearer ' + _authToken;
+        const r = await fetch(API_BASE + path, { method: 'PATCH', headers, body: JSON.stringify(body) });
+        if (r.status === 401) { signOut(); return null; }
+        return r.json();
+      } catch (e) { console.warn('[api] PATCH', path, e.message); return null; }
+    }
+
+    async function signOut() {
+      try {
+        if (_firebaseAuth) await _firebaseAuth.signOut();
+      } catch (_) { }
+      ['roadresq_token', 'roadresq_uid', 'roadresq_user', 'roadresq_photo'].forEach(k => localStorage.removeItem(k));
+      window.location.href = 'login.html';
+    }
+
+    // Logout button
+    document.getElementById('logoutBtn')?.addEventListener('click', signOut);
+
+    // ---- Firebase init + token auto-refresh ----
+    async function initFirebase() {
+      try {
+        const res = await fetch(API_BASE + '/api/config/firebase');
+        if (!res.ok) throw new Error('config endpoint ' + res.status);
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message);
+        if (!firebase.apps.length) firebase.initializeApp(json.data);
+        _firebaseAuth = firebase.auth();
+
+        // Track whether Firebase has ever confirmed a signed-in user.
+        // onIdTokenChanged fires with NULL during initial load before Firebase
+        // resolves the session — we must NOT treat that as a logout.
+        let _firebaseUserConfirmed = false;
+
+        _firebaseAuth.onIdTokenChanged(async (user) => {
+          if (user) {
+            _firebaseUserConfirmed = true;   // Firebase confirmed a real session
+            const freshToken = await user.getIdToken();
+            _authToken = freshToken;
+            localStorage.setItem('roadresq_token', freshToken);
+            localStorage.setItem('roadresq_uid', user.uid);
+            localStorage.setItem('roadresq_user', user.displayName || user.email?.split('@')[0] || 'Rider');
+            if (user.photoURL) localStorage.setItem('roadresq_photo', user.photoURL);
+            // Sync with backend and authenticate socket
+            await fetch(API_BASE + '/api/auth/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + freshToken },
+              body: JSON.stringify({ name: user.displayName, photoUrl: user.photoURL }),
+            }).catch(() => { });
+            if (_socket && !_socket.data?.authed) {
+              _socket.emit('auth', { idToken: freshToken });
+            }
+            updateUserUI(user);
+          } else {
+            // null fires in TWO cases:
+            //   1. Initial Firebase load (before session is resolved) ← do NOT sign out
+            //   2. User genuinely logged out                          ← sign out
+            if (_firebaseUserConfirmed) {
+              // Firebase previously gave us a user, so this null = real logout
+              signOut();
+            }
+            // If _firebaseUserConfirmed is still false, Firebase is still
+            // initializing. The localStorage auth guard already passed,
+            // so the user IS authenticated — just wait for Firebase to confirm.
+          }
+        });
+      } catch (err) {
+        console.warn('[firebase] init failed:', err.message, '— using cached token');
+      }
+    }
+
+    function updateUserUI(user) {
+      const name = user?.displayName || localStorage.getItem('roadresq_user') || 'Rider';
+      const dashUserName = document.getElementById('dashUserName');
+      if (dashUserName) dashUserName.textContent = `Hey, ${name} 👋`;
+    }
+
+    // ---- Socket.IO real-time connection ----
+    let _socket = null;
+    function connectSocket() {
+      if (typeof io === 'undefined') return;
+      _socket = io(API_BASE, { transports: ['websocket', 'polling'], autoConnect: true });
+      _socket.on('connect', () => {
+        console.log('[socket] connected:', _socket.id);
+        // Authenticate the socket with the current token
+        if (_authToken) _socket.emit('auth', { idToken: _authToken });
+      });
+      _socket.on('auth:ok', () => console.log('[socket] authenticated'));
+      _socket.on('auth:error', (d) => console.warn('[socket] auth error:', d.message));
+      _socket.on('request:update', data => {
+        if (data.status === 'arriving') toast('🚗 Your provider is on the way!', 'success');
+        if (data.status === 'arrived') toast('📍 Provider has arrived!', 'success');
+        if (data.status === 'active') toast('🔧 Service has started.', 'success');
+        if (data.status === 'completed') toast('✅ Service completed. Drive safe!', 'success');
+        if (data.status === 'cancelled') toast('❌ Request was cancelled.', 'warn');
+        // Refresh dashboard request list
+        loadRecentRequests();
+      });
+      _socket.on('new_notification', data => {
+        if (data?.notification?.title) toast('🔔 ' + data.notification.title);
+        updateNotificationBadge();
+      });
+      _socket.on('sos:activated', data => {
+        const banner = document.getElementById('sosAlert');
+        if (banner) {
+          banner.textContent = `🚨 SOS #${data.requestId} created. Tap Call 112 or 108 to reach emergency services.`;
+          banner.classList.add('show');
+        }
+      });
+      _socket.on('provider:location', data => {
+        // Update map marker if tracker is open
+        if (providerMarker && data.lat && data.lng) {
+          providerMarker.setLatLng([data.lat, data.lng]);
+          if (mapFindInst) mapFindInst.panTo([data.lat, data.lng]);
+        }
+      });
+    }
+
+    // Load Socket.IO client from the backend server
+    (function loadSocketIO() {
+      const s = document.createElement('script');
+      s.src = API_BASE + '/socket.io/socket.io.js';
+      s.onload = connectSocket;
+      s.onerror = () => console.warn('[socket] Backend not reachable — live tracking disabled');
+      document.head.appendChild(s);
+    })();
+
+    // Boot Firebase (non-blocking — UI works without it via cached token)
+    initFirebase();
+
+    // Refresh token every 55 minutes (Firebase tokens expire after 60 min)
+    setInterval(async () => {
+      if (_firebaseAuth?.currentUser) {
+        try {
+          _authToken = await _firebaseAuth.currentUser.getIdToken(true);
+          localStorage.setItem('roadresq_token', _authToken);
+        } catch (_) { }
+      }
+    }, 55 * 60 * 1000);
+  </script>
+
+  <script>
+    /* ============ MOCK DATA ============ */
+    const CENTER = [12.9716, 77.5946]; // Bengaluru
+    const providers = [
+      { id: 1, name: "Kumar Auto Works", cat: "mechanic", icon: "🔧", phone: "+91 98450 12233", lat: 12.9760, lng: 77.5990, address: "Indiranagar 100ft Rd", rating: 4.7, eta: 9, open: true },
+      { id: 2, name: "Speedy Puncture Point", cat: "puncture", icon: "🛞", phone: "+91 90080 44521", lat: 12.9660, lng: 77.5890, address: "Koramangala 5th Block", rating: 4.4, eta: 6, open: true },
+      { id: 3, name: "City Towing Service", cat: "towing", icon: "🚛", phone: "+91 99000 88231", lat: 12.9800, lng: 77.6050, address: "CMH Road", rating: 4.6, eta: 14, open: true },
+      { id: 4, name: "HP Fuel Express", cat: "fuel", icon: "⛽", phone: "+91 80502 11190", lat: 12.9600, lng: 77.5950, address: "Hosur Main Rd", rating: 4.2, eta: 11, open: true },
+      { id: 5, name: "Apollo Emergency Hospital", cat: "hospital", icon: "🏥", phone: "108", lat: 12.9750, lng: 77.5850, address: "Bannerghatta Rd", rating: 4.8, eta: 8, open: true },
+      { id: 6, name: "PowerCell Battery Van", cat: "battery", icon: "🔋", phone: "+91 91080 33210", lat: 12.9700, lng: 77.6020, address: "Old Airport Rd", rating: 4.3, eta: 10, open: false },
+      { id: 7, name: "Ravi Bros Mechanic Shed", cat: "mechanic", icon: "🔧", phone: "+91 90350 77812", lat: 12.9550, lng: 77.5990, address: "BTM Layout", rating: 4.1, eta: 13, open: true },
+      { id: 8, name: "National Highway Towing", cat: "towing", icon: "🚛", phone: "+91 98860 55110", lat: 12.9620, lng: 77.6100, address: "Silk Board Jn", rating: 4.5, eta: 17, open: true },
+      { id: 9, name: "Quick Fix Puncture Hub", cat: "puncture", icon: "🛞", phone: "+91 97400 22981", lat: 12.9840, lng: 77.5920, address: "Ulsoor Rd", rating: 4.0, eta: 7, open: true },
+      { id: 10, name: "IOC Fuel Station 24x7", cat: "fuel", icon: "⛽", phone: "+91 80502 99871", lat: 12.9680, lng: 77.5800, address: "Richmond Rd", rating: 4.5, eta: 5, open: true },
+    ];
+    const categories = [
+      { key: "all", label: "All" }, { key: "mechanic", label: "Mechanic" }, { key: "puncture", label: "Puncture" },
+      { key: "towing", label: "Towing" }, { key: "fuel", label: "Fuel" }, { key: "hospital", label: "Hospital" }, { key: "battery", label: "Battery" }
+    ];
+    const services = [
+      { ic: "🔧", t: "Mechanic Assistance", d: "On-site engine and repair support, dispatched fast." },
+      { ic: "🛞", t: "Puncture Repair", d: "Nearby tyre shops with live availability." },
+      { ic: "🚛", t: "Towing Support", d: "Flatbed and winch towing for total breakdowns." },
+      { ic: "⛽", t: "Fuel Delivery", d: "Never walk to a station again — fuel comes to you." },
+      { ic: "🔋", t: "Battery Jumpstart", d: "Dead battery? A van is closer than you think." },
+      { ic: "🚑", t: "Ambulance / Emergency", d: "One tap connects you to the nearest ambulance." },
+      { ic: "🏥", t: "Hospital Assistance", d: "Routed directions to the closest verified hospital." },
+      { ic: "💥", t: "Accident Support", d: "Combined towing, medical and police coordination." },
+    ];
+    const scenarios = [
+      { ic: "🌙", t: "Puncture at night", d: "Lit, verified shops within reach — even after dark." },
+      { ic: "🛣️", t: "Highway breakdown", d: "GPS-accurate pickup on stretches with no landmarks." },
+      { ic: "❓", t: "No mechanic known", d: "Skip the guesswork — ranked by distance and rating." },
+      { ic: "🚨", t: "Urgent towing", d: "Request a flatbed without hunting for a number." },
+    ];
+    const testimonials = [
+      { t: "Blew a tyre on the outer ring road at 11pm. Had a puncture shop confirmed in under two minutes.", n: "Ananya R.", r: "Daily Commuter", i: "A" },
+      { t: "The tracker showing my mechanic's ETA actually kept me calm — I knew exactly when help would reach.", n: "Suresh M.", r: "Delivery Rider", i: "S" },
+      { t: "Used the SOS panel after a minor accident. Ambulance and my emergency contact were notified instantly.", n: "Divya K.", r: "First-time User", i: "D" },
+    ];
+    const faqs = [
+      { q: "How does RoadResQ find nearby mechanics?", a: "We use your live location to rank verified providers by real distance, current availability, and rating." },
+      { q: "Can I use it in emergency situations?", a: "Yes — the SOS panel gives one-tap access to ambulance, towing, police and live location sharing." },
+      { q: "Does it show puncture shops and hospitals?", a: "Both, along with towing, fuel, battery service, and general mechanics, filterable on the map." },
+      { q: "Can I track the service provider?", a: "Yes, once a request is made you get a live status timeline and ETA countdown." },
+      { q: "Is login required for help requests?", a: "No — emergency help and the map are available without an account, though logging in saves history and contacts." },
+    ];
+    const recentRequests = [
+      { id: "RR-28210", svc: "Puncture Repair", status: "done" },
+      { id: "RR-27950", svc: "Fuel Delivery", status: "done" },
+      { id: "RR-27711", svc: "Mechanic Visit", status: "progress" },
+    ];
+    const savedContacts = [
+      { n: "Home — Dad", p: "+91 98450 00112" },
+      { n: "Roadside Insurance", p: "+91 1800 209 1122" },
+    ];
+    const quickIssues = [
+      { ic: "🛞", l: "Puncture" }, { ic: "⚙️", l: "Breakdown" }, { ic: "🔋", l: "Battery" },
+      { ic: "⛽", l: "Fuel Empty" }, { ic: "🚛", l: "Towing" }, { ic: "💥", l: "Accident" },
+    ];
+
+    /* ============ UTILITIES ============ */
+    function el(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; }
+
+    function toast(msg, type = '') {
+      const t = el('div', 'toast' + (type ? ' ' + type : ''), msg);
+      document.getElementById('toastWrap').appendChild(t);
+      setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(20px)'; setTimeout(() => t.remove(), 300); }, 3200);
+    }
+
+    function haversine(lat1, lng1, lat2, lng2) {
+      const R = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    let userLocation = null;
+    let pendingRequestId = null;
+    let findSearchQuery = '';
+
+    function getProviderDistance(p) {
+      if (!userLocation) return p.eta * 0.6;
+      return haversine(userLocation.lat, userLocation.lng, p.lat, p.lng);
+    }
+
+    function sortProviders(list) {
+      return [...list].sort((a, b) => {
+        if (a.open !== b.open) return b.open - a.open;
+        return getProviderDistance(a) - getProviderDistance(b);
+      });
+    }
+
+    function detectLocation(onDone) {
+      if (!navigator.geolocation) { toast('Geolocation not supported in this browser.', 'warn'); return; }
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          const hint = document.getElementById('sortHint');
+          if (hint) hint.innerHTML = `Sorted by distance from you · <span class="nearest-tag">Live GPS</span> · <button type="button" id="useMyLocation">Refresh location</button>`;
+          document.getElementById('useMyLocation')?.addEventListener('click', () => detectLocation(renderProviders));
+          if (mapFindInst) mapFindInst.setView([userLocation.lat, userLocation.lng], 13);
+          // Fetch real nearby providers from backend, then re-render
+          fetchNearbyProviders().then(() => {
+            renderProviders();
+            renderNearbyPreview();
+          });
+          toast('Location detected — providers sorted nearest first.', 'success');
+          if (onDone) onDone(userLocation);
+        },
+        () => toast('Location permission denied — showing default area.', 'warn'),
+        { timeout: 8000, enableHighAccuracy: true }
+      );
+    }
+
+    /* Fetch real providers from backend; falls back silently to mock array */
+    async function fetchNearbyProviders() {
+      if (!userLocation) return;
+      const data = await apiGet(
+        `/api/providers/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radiusKm=20`
+      );
+      if (data && data.providers && data.providers.length) {
+        data.providers.forEach(bp => {
+          const existing = providers.find(p => p._id === bp._id || p.name === bp.name);
+          if (!existing) {
+            providers.push({
+              id: bp._id, _id: bp._id,
+              name: bp.name,
+              cat: bp.category,
+              icon: categoryIcon(bp.category),
+              phone: bp.phone || 'N/A',
+              lat: bp.location?.coordinates?.[1] || CENTER[0],
+              lng: bp.location?.coordinates?.[0] || CENTER[1],
+              address: bp.address || bp.city || 'Nearby',
+              rating: bp.rating || 4.2,
+              eta: bp.etaMinutes || 10,
+              open: bp.open !== false,
+            });
+          }
+        });
+        toast(`Loaded ${data.providers.length} live providers from network.`, 'success');
+      }
+    }
+
+    function categoryIcon(cat) {
+      const icons = { mechanic: '🔧', puncture: '🛞', towing: '🚛', fuel: '⛽', hospital: '🏥', battery: '🔋', police: '👮' };
+      return icons[cat] || '🛠';
+    }
+
+    /* ============ VIEW ROUTING ============ */
+    function setView(name) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById('view-' + name).classList.add('active');
+      document.querySelectorAll('.nav-links button').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.getElementById('navLinks').classList.remove('open');
+      document.getElementById('fabSos').classList.toggle('hidden', name === 'sos');
+      if (name === 'find') { setTimeout(() => { if (mapFindInst) mapFindInst.invalidateSize(); document.getElementById('findSearch')?.focus(); }, 80); }
+      if (name === 'dashboard') setTimeout(() => { if (mapDashInst) mapDashInst.invalidateSize(); }, 80);
+    }
+    document.querySelectorAll('[data-view]').forEach(el => {
+      el.addEventListener('click', (e) => { e.preventDefault(); setView(el.dataset.view); });
+    });
+    document.getElementById('hamburger').addEventListener('click', () => {
+      document.getElementById('navLinks').classList.toggle('open');
+    });
+
+    /* ============ HERO COUNTERS ============ */
+    function animateCounters() {
+      document.querySelectorAll('[data-count]').forEach(el => {
+        const target = parseInt(el.dataset.count, 10);
+        const suffix = el.dataset.suffix || '';
+        let cur = 0;
+        const step = Math.max(1, Math.round(target / 60));
+        const iv = setInterval(() => {
+          cur += step;
+          if (cur >= target) { cur = target; clearInterval(iv); }
+          el.textContent = cur.toLocaleString() + suffix;
+        }, 20);
+      });
+      // speedo arc
+      const arc = document.getElementById('speedoArc');
+      let off = 330;
+      const target = 330 - 330 * 0.7;
+      const iv2 = setInterval(() => {
+        off -= 6;
+        if (off <= target) { off = target; clearInterval(iv2); }
+        arc.setAttribute('stroke-dashoffset', off);
+      }, 20);
+    }
+    setTimeout(animateCounters, 400);
+
+    /* ============ RENDER STATIC CONTENT ============ */
+
+    const svcGrid = document.getElementById('servicesGrid');
+    const catMap = { Mechanic: 'mechanic', Puncture: 'puncture', Towing: 'towing', Fuel: 'fuel', Battery: 'battery', Ambulance: 'hospital', Hospital: 'hospital', Accident: 'hospital' };
+    services.forEach(s => {
+      const card = el('div', 'svc-card clickable', `<div class="icon">${s.ic}</div><h4>${s.t}</h4><p>${s.d}</p>`);
+      card.addEventListener('click', () => {
+        const key = Object.entries(catMap).find(([k]) => s.t.includes(k))?.[1] || 'all';
+        activeCat = key;
+        setView('find');
+        setTimeout(() => {
+          document.querySelectorAll('.chip').forEach(ch => ch.classList.toggle('active', ch.dataset.cat === activeCat));
+          renderProviders();
+        }, 100);
+      });
+      svcGrid.appendChild(card);
+    });
+
+    const scenGrid = document.getElementById('scenarioGrid');
+    scenarios.forEach(s => {
+      scenGrid.appendChild(el('div', 'svc-card', `<div class="icon">${s.ic}</div><h4>${s.t}</h4><p>${s.d}</p>`));
+    });
+
+    const nearbyPreview = document.getElementById('nearbyPreview');
+    function renderNearbyPreview() {
+      nearbyPreview.innerHTML = '';
+      sortProviders(providers.filter(p => p.open)).slice(0, 3).forEach((p, i) => {
+        const dist = getProviderDistance(p).toFixed(1);
+        nearbyPreview.appendChild(el('div', 'provider-card' + (i === 0 && userLocation ? ' highlight' : ''), `
+      <div class="p-top">
+        <div><div class="p-name">${p.icon} ${p.name}</div><div class="p-cat">${p.cat}${i === 0 && userLocation ? ' · <span class="nearest-tag">Nearest</span>' : ''}</div></div>
+        <div class="badge open">Open</div>
+      </div>
+      <div class="p-meta"><span>📍 ${p.address}</span><span>📏 ${dist} km</span><span>⭐ ${p.rating}</span><span>⏱ ${p.eta} min</span></div>
+      <div class="p-actions"><button class="btn btn-hazard btn-sm" onclick="requestHelp(${p.id})">Request Help</button></div>
+    `));
+      });
+    }
+    renderNearbyPreview();
+
+    // Breakdown wizard — 9 interactive issue cards
+    const wizardData = [
+      { ic: '🛞', l: 'Flat Tyre', cat: 'puncture', msg: 'Flat tyre detected — routing to nearest puncture shops.' },
+      { ic: '⚙️', l: 'Engine Problem', cat: 'mechanic', msg: 'Engine issue reported — nearby mechanics are being ranked by ETA.' },
+      { ic: '🔋', l: 'Battery Dead', cat: 'battery', msg: 'Dead battery — jumpstart vans nearby are on standby.' },
+      { ic: '⛽', l: 'Fuel Empty', cat: 'fuel', msg: 'Fuel empty — mobile fuel delivery providers are ready to dispatch.' },
+      { ic: '💥', l: 'Accident', cat: 'hospital', msg: 'Accident reported — ambulance, towing and hospital options are ready.' },
+      { ic: '🚛', l: 'Tow Truck', cat: 'towing', msg: 'Flatbed towing requested — nearest towing units ranked by ETA.' },
+      { ic: '🔑', l: "Vehicle Won't Start", cat: 'mechanic', msg: "Starting issue — mechanics and jumpstart vans nearby are ready." },
+      { ic: '💨', l: 'Smoke', cat: 'mechanic', msg: 'Smoke reported — a mechanic is being dispatched to inspect your vehicle.' },
+      { ic: '🛑', l: 'Brake Failure', cat: 'mechanic', msg: 'Brake failure — treat this as urgent. Nearest mechanics are ranked by ETA.' },
+    ];
+    const wOpts = document.getElementById('wizardOptions');
+    const wResult = document.getElementById('wizardResult');
+    const wizardEl = document.getElementById('breakdownWizard');
+
+    // Estimated cost model — base callout fee + per-km rate, by category (INR)
+    const costModel = {
+      mechanic: { base: 250, perKm: 12 }, puncture: { base: 100, perKm: 8 }, towing: { base: 600, perKm: 25 },
+      fuel: { base: 150, perKm: 10 }, hospital: { base: 0, perKm: 0 }, battery: { base: 200, perKm: 10 },
+    };
+    function estimateCost(cat, distKm) {
+      const m = costModel[cat] || { base: 200, perKm: 10 };
+      if (cat === 'hospital') return 'Emergency — no charge';
+      const total = Math.round(m.base + m.perKm * distKm);
+      return `₹${total}–₹${total + 150}`;
+    }
+
+    wizardData.forEach(w => {
+      const b = el('button', 'wopt', `<span class="check">✓</span><span class="ic">${w.ic}</span>${w.l}`);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', (e) => {
+        // ripple effect
+        const rect = b.getBoundingClientRect();
+        const ripple = el('span', 'ripple');
+        const size = Math.max(rect.width, rect.height);
+        ripple.style.width = ripple.style.height = size + 'px';
+        ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+        ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+        b.appendChild(ripple);
+        setTimeout(() => ripple.remove(), 600);
+
+        document.querySelectorAll('.wopt').forEach(o => { o.classList.remove('selected'); o.setAttribute('aria-pressed', 'false'); });
+        b.classList.add('selected');
+        b.setAttribute('aria-pressed', 'true');
+
+        // set data attribute for the selected issue + drive existing filter pipeline
+        wizardEl.dataset.selectedIssue = w.l;
+        activeCat = w.cat;
+
+        // find nearest matching provider for the recommended-service summary
+        const matches = sortProviders(providers.filter(p => p.cat === w.cat));
+        const nearest = matches[0];
+        const dist = nearest ? getProviderDistance(nearest) : null;
+
+        wResult.classList.add('show');
+        wResult.innerHTML = `
+      <div style="margin-bottom:14px;">${w.msg}</div>
+      ${nearest ? `
+      <div class="wizard-summary-grid">
+        <div><div style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Recommended</div><div style="font-size:13.5px;font-weight:700;">${nearest.icon} ${nearest.name}</div></div>
+        <div><div style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">ETA</div><div style="font-size:13.5px;font-weight:700;color:var(--caution);">${nearest.eta} min</div></div>
+        <div><div style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Distance</div><div style="font-size:13.5px;font-weight:700;">${dist.toFixed(1)} km</div></div>
+        <div><div style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Est. Cost</div><div style="font-size:13.5px;font-weight:700;color:var(--go);">${estimateCost(w.cat, dist)}</div></div>
+      </div>` : `<div style="color:var(--muted);font-size:13px;margin-bottom:12px;">No ${w.cat} providers currently listed near you.</div>`}
+      <button class="btn btn-hazard btn-sm" id="wizardGo">Find ${w.cat} help →</button>
+    `;
+        document.getElementById('wizardGo').addEventListener('click', () => {
+          setView('find');
+          setTimeout(() => {
+            document.querySelectorAll('.chip').forEach(ch => ch.classList.toggle('active', ch.dataset.cat === activeCat));
+            renderProviders();
+            toast(`Showing ${w.cat} providers near you.`);
+          }, 100);
+        });
+      });
+      wOpts.appendChild(b);
+    });
+
+    // testimonials
+    const tTrack = document.getElementById('testiTrack');
+    const tDots = document.getElementById('testiDots');
+    testimonials.forEach((t, i) => {
+      tTrack.appendChild(el('div', 'testi' + (i === 0 ? ' show' : ''), `
+    <p>"${t.t}"</p>
+    <div class="who"><div class="av">${t.i}</div><div><b>${t.n}</b><span>${t.r}</span></div></div>
+  `));
+      const dot = el('button', i === 0 ? 'active' : '');
+      dot.addEventListener('click', () => showTesti(i));
+      tDots.appendChild(dot);
+    });
+    let testiIdx = 0;
+    function showTesti(i) {
+      document.querySelectorAll('.testi').forEach((t, idx) => t.classList.toggle('show', idx === i));
+      document.querySelectorAll('.testi-dots button').forEach((d, idx) => d.classList.toggle('active', idx === i));
+      testiIdx = i;
+    }
+    setInterval(() => { showTesti((testiIdx + 1) % testimonials.length); }, 5000);
+
+    // FAQ
+    const faqList = document.getElementById('faqList');
+    faqs.forEach(f => {
+      const item = el('div', 'faq-item', `<button class="faq-q"><span>${f.q}</span><span class="plus">+</span></button><div class="faq-a">${f.a}</div>`);
+      item.querySelector('.faq-q').addEventListener('click', () => item.classList.toggle('open'));
+      faqList.appendChild(item);
+    });
+
+    /* ============ FIND / MAP VIEW ============ */
+    let activeCat = 'all';
+    const filterRow = document.getElementById('filterRow');
+    categories.forEach(c => {
+      const chip = el('button', 'chip' + (c.key === 'all' ? ' active' : ''), c.label);
+      chip.dataset.cat = c.key;
+      chip.addEventListener('click', () => {
+        activeCat = c.key;
+        document.querySelectorAll('.chip').forEach(ch => ch.classList.remove('active'));
+        chip.classList.add('active');
+        renderProviders();
+      });
+      filterRow.appendChild(chip);
+    });
+
+    function providerCardHTML(p, isNearest) {
+      const dist = getProviderDistance(p).toFixed(1);
+      const reviews = p.reviews || Math.round(p.rating * 47);
+      return `
+    <div class="p-top">
+      <div style="display:flex;gap:12px;align-items:flex-start;">
+        <div class="p-avatar">${p.icon}</div>
+        <div><div class="p-name">${p.name}${isNearest ? ` <span class="nearest-tag">Nearest</span>` : ''}</div><div class="p-cat">${p.cat}</div></div>
+      </div>
+      <div class="badge ${p.open ? 'open' : 'closed'}">${p.open ? 'Open' : 'Closed'}</div>
+    </div>
+    <div class="p-meta">
+      <span>📍 ${p.address}</span><span>📏 ${dist} km</span><span>⭐ ${p.rating} (${reviews})</span><span>⏱ ${p.eta} min</span>
+    </div>
+    <div class="p-actions">
+      <a class="btn btn-outline" href="tel:${p.phone}">📞 Call</a>
+      <a class="btn btn-outline" href="https://www.openstreetmap.org/directions?to=${p.lat},${p.lng}" target="_blank" rel="noopener">🧭 Directions</a>
+      <button class="btn btn-hazard" onclick="requestHelp(${p.id})">Request Help</button>
+    </div>
+  `;
+    }
+
+    function renderProviders() {
+      let list = providers.filter(p => activeCat === 'all' || p.cat === activeCat);
+      if (findSearchQuery) {
+        const q = findSearchQuery.toLowerCase();
+        list = list.filter(p => p.name.toLowerCase().includes(q) || p.address.toLowerCase().includes(q) || p.cat.includes(q));
+      }
+      list = sortProviders(list);
+      const side = document.getElementById('providerListSide');
+      const grid = document.getElementById('providerGrid');
+      side.innerHTML = ''; grid.innerHTML = '';
+      if (!list.length) {
+        const empty = `<div class="empty-state"><div class="ic">🔍</div>No providers match — try another filter or search term.</div>`;
+        side.innerHTML = empty; grid.innerHTML = empty;
+        renderMapMarkers([]);
+        return;
+      }
+      list.forEach((p, i) => {
+        const isNearest = i === 0 && userLocation && p.open;
+        const c1 = el('div', 'provider-card' + (isNearest ? ' highlight' : ''), providerCardHTML(p, isNearest));
+        c1.id = 'side-' + p.id;
+        side.appendChild(c1);
+        const c2 = el('div', 'provider-card', providerCardHTML(p, false));
+        c2.id = 'grid-' + p.id;
+        grid.appendChild(c2);
+      });
+      renderMapMarkers(list);
+    }
+
+    let mapFindInst, mapDashInst, markersLayer, providerMarker;
+    function initMaps() {
+      mapFindInst = L.map('mapFind', { zoomControl: true }).setView(CENTER, 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mapFindInst);
+      markersLayer = L.layerGroup().addTo(mapFindInst);
+      if (userLocation) {
+        L.circleMarker([userLocation.lat, userLocation.lng], { radius: 10, color: '#35c58b', fillColor: '#35c58b', fillOpacity: 0.3, weight: 2 }).addTo(mapFindInst).bindPopup('You are here');
+      }
+
+      mapDashInst = L.map('mapDash', { zoomControl: false, dragging: false, scrollWheelZoom: false }).setView(CENTER, 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mapDashInst);
+      providers.slice(0, 6).forEach(p => {
+        L.circleMarker([p.lat, p.lng], { radius: 6, color: '#ff6a2b', fillColor: '#ffc93c', fillOpacity: 0.9 }).addTo(mapDashInst)
+          .bindPopup(`<b>${p.name}</b><br>${p.cat}`);
+      });
+      renderProviders();
+    }
+
+    function renderMapMarkers(list) {
+      if (!markersLayer) return;
+      markersLayer.clearLayers();
+      if (userLocation) {
+        L.circleMarker([userLocation.lat, userLocation.lng], { radius: 10, color: '#35c58b', fillColor: '#35c58b', fillOpacity: 0.25, weight: 2 }).addTo(markersLayer).bindPopup('You are here');
+      }
+      list.forEach(p => {
+        const marker = L.circleMarker([p.lat, p.lng], {
+          radius: 8, color: p.open ? '#ff6a2b' : '#555', fillColor: p.open ? '#ffc93c' : '#777', fillOpacity: 0.9, weight: 2
+        }).addTo(markersLayer);
+        marker.bindPopup(`<b>${p.name}</b><br>${p.cat} · ${getProviderDistance(p).toFixed(1)} km · ⭐ ${p.rating}<br>${p.open ? 'Open' : 'Closed'}`);
+        marker.on('click', () => {
+          document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('highlight'));
+          const c = document.getElementById('side-' + p.id);
+          if (c) { c.classList.add('highlight'); c.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+        });
+      });
+    }
+
+    window.requestHelp = function (id) {
+      const p = providers.find(x => x.id === id);
+      if (!p) return;
+      pendingRequestId = id;
+      document.getElementById('modalTitle').textContent = `Request ${p.name}?`;
+      document.getElementById('modalDesc').textContent = `A verified ${p.cat} provider will be notified. You'll get live tracking once they accept.`;
+      document.getElementById('modalMeta').innerHTML = `
+    <span>📏 ${getProviderDistance(p).toFixed(1)} km away</span>
+    <span>⏱ ~${p.eta} min ETA</span>
+    <span>⭐ ${p.rating}</span>
+    <span>📞 ${p.phone}</span>
+  `;
+      document.getElementById('requestModal').classList.add('open');
+    };
+
+    async function confirmRequest() {
+      const p = providers.find(x => x.id === pendingRequestId);
+      if (!p) return;
+      document.getElementById('requestModal').classList.remove('open');
+
+      const localReqId = 'RR-' + Math.floor(20000 + Math.random() * 9000);
+      document.getElementById('reqId').textContent = localReqId;
+      document.getElementById('providerAssigned').textContent = `Provider: ${p.name.split(' ')[0]} Team — ${p.name} · 📞 ${p.phone}`;
+
+      // Optimistic local update
+      recentRequests.unshift({ id: localReqId, svc: p.cat.charAt(0).toUpperCase() + p.cat.slice(1), status: 'progress' });
+      if (recentRequests.length > 5) recentRequests.pop();
+      renderRecentRequests();
+
+      document.querySelectorAll('.floating-card').forEach(c => c.classList.add('show'));
+      toast(`Request sent to ${p.name}. Tracking started.`, 'success');
+      setView('tracker');
+      startTracker(p.eta);
+
+      // Submit to backend — works with or without location
+      if (_authToken) {
+        const issueMap = {
+          puncture: 'Flat Tyre', mechanic: 'Engine Problem', towing: 'Tow Truck',
+          fuel: 'Fuel Empty', battery: 'Battery Dead', hospital: 'Accident', general: 'General Assistance',
+        };
+        const payload = {
+          issue: issueMap[activeCat] || 'General Assistance',
+          category: p.cat,
+          contactName: localStorage.getItem('roadresq_user') || 'Rider',
+          contactPhone: p.phone,
+          locationLabel: userLocation ? 'Current location' : 'Location not shared',
+        };
+        if (userLocation) payload.coordinates = [userLocation.lng, userLocation.lat];
+        else payload.coordinates = [p.lng, p.lat]; // fall back to provider coords
+
+        const resp = await apiPost('/api/requests', payload);
+        if (resp && resp.success && resp.data?.request) {
+          const realId = resp.data.request.requestCode;
+          document.getElementById('reqId').textContent = realId;
+          recentRequests[0].id = realId;
+          renderRecentRequests();
+          const assignedProvider = resp.data.provider;
+          if (assignedProvider) {
+            document.getElementById('providerAssigned').textContent =
+              `Provider: ${assignedProvider.name} · 📞 ${assignedProvider.phone}`;
+          }
+          toast(`Request ${realId} confirmed — provider notified.`, 'success');
+        } else if (resp && !resp.success) {
+          toast('Sent locally — backend reported: ' + (resp.message || 'unknown error'), 'warn');
+        }
+      }
+    }
+
+    document.getElementById('modalConfirm').addEventListener('click', confirmRequest);
+    document.getElementById('modalCancel').addEventListener('click', () => {
+      document.getElementById('requestModal').classList.remove('open');
+      pendingRequestId = null;
+    });
+    document.getElementById('requestModal').addEventListener('click', e => {
+      if (e.target.id === 'requestModal') { document.getElementById('requestModal').classList.remove('open'); pendingRequestId = null; }
+    });
+
+    /* ============ AUTH / USER INIT ============ */
+    // Display name from localStorage immediately (before Firebase resolves)
+    updateUserUI(null);
+
+    /* ============ DASHBOARD ============ */
+    const quickGrid = document.getElementById('quickActions');
+    quickIssues.forEach(q => {
+      const b = el('div', 'qbtn', `<div class="ic">${q.ic}</div><div class="lbl">${q.l}</div>`);
+      b.addEventListener('click', () => {
+        const map = { Puncture: 'puncture', Breakdown: 'mechanic', Battery: 'battery', ['Fuel Empty']: 'fuel', Towing: 'towing', Accident: 'hospital' };
+        activeCat = map[q.l] || 'all';
+        setView('find');
+        setTimeout(() => {
+          document.querySelectorAll('.chip').forEach(ch => ch.classList.toggle('active', ch.dataset.cat === activeCat));
+          renderProviders();
+        }, 100);
+      });
+      quickGrid.appendChild(b);
+    });
+
+    // ── Recent requests: load from API, fall back to local mock list ──────────
+    const recentEl = document.getElementById('recentRequests');
+    function renderRecentRequests(apiList) {
+      recentEl.innerHTML = '';
+      const list = apiList || recentRequests;
+      if (!list.length) {
+        recentEl.innerHTML = '<div style="color:var(--muted);font-size:13px;">No recent requests.</div>';
+        return;
+      }
+      list.forEach(r => {
+        const svc = r.svc || r.issue || 'Service';
+        const id = r.id || r.requestCode || '—';
+        const done = r.status === 'done' || r.status === 'completed';
+        recentEl.appendChild(el('div', 'req-item',
+          `<span>${svc} <span class="mono" style="color:var(--muted);">· ${id}</span></span>
+           <span class="status ${done ? 'done' : 'progress'}">${done ? 'Completed' : 'In Progress'}</span>`
+        ));
+      });
+    }
+    renderRecentRequests();
+
+    async function loadRecentRequests() {
+      if (!_authToken) return;
+      const data = await apiGet('/api/requests');
+      if (data?.success && data.data?.requests?.length) {
+        const mapped = data.data.requests.slice(0, 5).map(r => ({
+          svc: r.issue, id: r.requestCode, status: r.status,
+        }));
+        renderRecentRequests(mapped);
+      }
+    }
+
+    // ── Emergency contacts: load from API, fall back to local mock list ───────
+    const contactsEl = document.getElementById('savedContacts');
+    function renderEmergencyContacts(apiList) {
+      contactsEl.innerHTML = '';
+      const list = apiList || savedContacts;
+      if (!list.length) {
+        contactsEl.innerHTML = '<div style="color:var(--muted);font-size:13px;">No saved contacts. <a href="#" style="color:var(--hazard)">Add one →</a></div>';
+        return;
+      }
+      list.forEach(c => {
+        const name = c.n || c.name;
+        const phone = c.p || c.phone;
+        contactsEl.appendChild(el('div', 'contact-item',
+          `<span>${name}</span><a class="btn btn-outline btn-sm" href="tel:${phone}">Call</a>`
+        ));
+      });
+    }
+    renderEmergencyContacts();
+
+    async function loadEmergencyContacts() {
+      if (!_authToken) return;
+      const data = await apiGet('/api/users/me/emergency-contacts');
+      if (data?.success && data.data?.contacts) {
+        renderEmergencyContacts(data.data.contacts);
+      }
+    }
+
+    // ── Notification badge helper ─────────────────────────────────────────────
+    function updateNotificationBadge() {
+      // Placeholder — a full notification bell UI would go here
+      console.log('[notifications] badge updated');
+    }
+
+    document.getElementById('locBtn').addEventListener('click', function () {
+      const btn = this;
+      btn.textContent = '📍 Locating…';
+      detectLocation(loc => {
+        btn.textContent = `📍 ${loc.lat.toFixed(3)}, ${loc.lng.toFixed(3)}`;
+      });
+    });
+    document.getElementById('useMyLocation')?.addEventListener('click', () => detectLocation());
+    document.getElementById('findSearch')?.addEventListener('input', e => {
+      findSearchQuery = e.target.value.trim();
+      renderProviders();
+    });
+    document.getElementById('dashSearchBtn').addEventListener('click', () => {
+      const v = document.getElementById('dashSearch').value.toLowerCase();
+      findSearchQuery = v;
+      const found = categories.find(c => v.includes(c.key));
+      activeCat = found ? found.key : 'all';
+      setView('find');
+      setTimeout(() => {
+        document.getElementById('findSearch').value = v;
+        document.querySelectorAll('.chip').forEach(ch => ch.classList.toggle('active', ch.dataset.cat === activeCat));
+        renderProviders();
+      }, 100);
+    });
+
+    /* ============ TRACKER ============ */
+    const stages = [
+      { t: 'Request received', d: 'Your request has entered the RoadResQ network.' },
+      { t: 'Provider assigned', d: 'A verified provider near you has accepted the request.' },
+      { t: 'Provider on the way', d: 'Live location is being tracked as they approach.' },
+      { t: 'Reached destination', d: 'Provider has arrived at your location.' },
+      { t: 'Service completed', d: 'Issue resolved — drive safe!' },
+    ];
+    let trackerTimer;
+    function renderTimeline(activeIdx) {
+      const tl = document.getElementById('timeline');
+      tl.innerHTML = '';
+      stages.forEach((s, i) => {
+        const cls = i < activeIdx ? 'done' : (i === activeIdx ? 'active' : '');
+        tl.appendChild(el('div', 'tl-item ' + cls, `<div class="tl-dot"></div><div class="tl-content"><h4>${s.t}</h4><p>${s.d}</p></div>`));
+      });
+    }
+    function startTracker(etaMin) {
+      clearInterval(trackerTimer);
+      let stageIdx = 0;
+      let secondsLeft = (etaMin || 8) * 60;
+      renderTimeline(stageIdx);
+      updateEta(secondsLeft);
+      const stageEvery = Math.max(3, Math.floor(secondsLeft / stages.length / 10)); // demo-speed compression
+      let tick = 0;
+      trackerTimer = setInterval(() => {
+        tick++;
+        secondsLeft = Math.max(0, secondsLeft - 6);
+        updateEta(secondsLeft);
+        if (tick % 4 === 0 && stageIdx < stages.length - 1) {
+          stageIdx++;
+          renderTimeline(stageIdx);
+        }
+        if (stageIdx >= stages.length - 1 && secondsLeft <= 0) { clearInterval(trackerTimer); }
+      }, 500);
+    }
+    function updateEta(sec) {
+      const m = Math.floor(sec / 60), s = sec % 60;
+      document.getElementById('etaLive').textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+    document.getElementById('restartTrack').addEventListener('click', () => {
+      const p = providers[Math.floor(Math.random() * providers.length)];
+      document.getElementById('reqId').textContent = 'RR-' + Math.floor(20000 + Math.random() * 9000);
+      document.getElementById('providerAssigned').textContent = `Provider: ${p.name.split(' ')[0]} Team — ${p.name} · 📞 ${p.phone}`;
+      startTracker(p.eta);
+    });
+    startTracker(8);
+
+    /* ============ SOS ============ */
+    const sosOptions = [
+      { ic: '🚑', t: 'Call Ambulance', d: 'Direct line to emergency medical services.', action: 'tel:108' },
+      { ic: '🚛', t: 'Call Towing', d: 'Nearest towing van dispatched immediately.', action: 'tel:+919900088231' },
+      { ic: '📍', t: 'Share Live Location', d: 'Send GPS coordinates to your emergency contact.', action: 'share' },
+      { ic: '👪', t: 'Notify Emergency Contact', d: 'Alert your saved contact with one tap.', action: 'notify' },
+      { ic: '🏥', t: 'Nearby Hospital', d: 'Route to the closest verified hospital.', action: 'find:hospital' },
+      { ic: '👮', t: 'Police / Highway Help', d: 'Reach local police or highway patrol.', action: 'tel:112' },
+    ];
+    const sosGrid = document.getElementById('sosGrid');
+    sosOptions.forEach(o => {
+      const card = el('div', 'sos-card', `<div class="ic">${o.ic}</div><h4>${o.t}</h4><p>${o.d}</p>`);
+      const btn = el('button', 'btn btn-outline btn-block', 'Activate');
+      btn.addEventListener('click', () => {
+        if (o.action.startsWith('tel:')) { window.location.href = o.action; }
+        else if (o.action === 'share') {
+          const banner = document.getElementById('sosAlert');
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(pos => {
+              banner.textContent = `📍 Location shared: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)} — sent to emergency contact.`;
+              banner.classList.add('show');
+            }, () => { banner.textContent = '📍 Location permission denied — could not share.'; banner.classList.add('show'); });
+          }
+        } else if (o.action === 'notify') {
+          // Open WhatsApp or SMS with pre-filled message if location is available
+          const banner = document.getElementById('sosAlert');
+          if (userLocation) {
+            const mapsLink = `https://maps.google.com/?q=${userLocation.lat},${userLocation.lng}`;
+            const msg = encodeURIComponent(`🚨 RoadResQ SOS: I need help. My location: ${mapsLink}`);
+            // Try Web Share API first, then fall back to WhatsApp link
+            if (navigator.share) {
+              navigator.share({ title: 'RoadResQ SOS', text: `I need help. Location: ${mapsLink}`, url: mapsLink }).catch(() => { });
+            } else {
+              window.open(`https://wa.me/?text=${msg}`, '_blank');
+            }
+            banner.textContent = '👪 Location message ready to share with your emergency contacts.';
+          } else {
+            banner.textContent = '👪 Enable location first so we can include your coordinates.';
+          }
+          banner.classList.add('show');
+        } else if (o.action.startsWith('find:')) {
+          activeCat = o.action.split(':')[1];
+          setView('find');
+          setTimeout(renderProviders, 100);
+        }
+      });
+      card.appendChild(btn);
+      sosGrid.appendChild(card);
+    });
+    document.getElementById('sosBtn').addEventListener('click', () => {
+      document.getElementById('sosStatus').textContent = 'SOS alert created — call 112 or 108 immediately.';
+      const banner = document.getElementById('sosAlert');
+      banner.classList.add('show');
+      banner.textContent = '🚨 Activating SOS — detecting location…';
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async pos => {
+          const lat = pos.coords.latitude, lng = pos.coords.longitude;
+          userLocation = { lat, lng };
+          const mapsLink = `https://maps.google.com/?q=${lat},${lng}`;
+          banner.textContent = `🚨 SOS alert created — location (${lat.toFixed(4)}, ${lng.toFixed(4)}) recorded. Tap 📞 Call Ambulance or Call Police below.`;
+          if (_authToken) {
+            const resp = await apiPost('/api/sos', { coordinates: [lng, lat] });
+            if (resp?.success && resp.data?.request) {
+              const reqCode = resp.data.request.requestCode;
+              const nums = resp.data.emergencyNumbers;
+              banner.innerHTML = `🚨 SOS #${reqCode} logged. Call <a href="tel:${nums?.ambulance || '108'}" style="color:var(--hazard)">Ambulance ${nums?.ambulance || '108'}</a> or <a href="tel:${nums?.police || '112'}" style="color:var(--hazard)">Police ${nums?.police || '112'}</a> directly.`;
+              toast('SOS alert logged. Call emergency services immediately.', 'warn');
+              if (resp.data.notifiedContacts > 0) {
+                toast(`Email alert sent to ${resp.data.notifiedContacts} emergency contact(s).`, 'success');
+              }
+            }
+          }
+        }, () => {
+          banner.textContent = '🚨 SOS — location permission denied. Tap Call Ambulance (108) or Call Police (112) below.';
+        });
+      } else {
+        banner.textContent = '🚨 SOS — geolocation not supported. Tap Call Ambulance (108) or Call Police (112) below.';
+      }
+    });
+
+    /* ============ UI POLISH ============ */
+    document.getElementById('fabSos').addEventListener('click', () => setView('sos'));
+    document.getElementById('scrollTop').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+    window.addEventListener('scroll', () => {
+      document.getElementById('scrollTop').classList.toggle('show', window.scrollY > 400);
+    }, { passive: true });
+
+    const revealObs = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+    }, { threshold: 0.12 });
+    document.querySelectorAll('.reveal').forEach(el => revealObs.observe(el));
+
+    // Live provider count ticker
+    let liveN = providers.filter(p => p.open).length;
+    setInterval(() => {
+      liveN = Math.max(320, Math.min(360, liveN + (Math.random() > 0.5 ? 1 : -1)));
+      document.getElementById('liveCount').textContent = liveN;
+    }, 4000);
+
+    // Keyboard shortcuts
+    const views = ['home', 'find', 'dashboard', 'tracker', 'sos'];
+    document.addEventListener('keydown', e => {
+      if (e.target.matches('input,textarea,select')) return;
+      if (e.key === 'e' || e.key === 'E') { e.preventDefault(); setView('sos'); toast('Emergency panel opened.', 'warn'); }
+      if (e.key === '/') { e.preventDefault(); setView('find'); document.getElementById('findSearch')?.focus(); }
+      if (e.key >= '1' && e.key <= '5') { setView(views[+e.key - 1]); }
+      if (e.key === 'Escape') {
+        document.getElementById('requestModal').classList.remove('open');
+        document.getElementById('navLinks').classList.remove('open');
+      }
+    });
+    setTimeout(() => document.getElementById('kbdHint').classList.add('show'), 2000);
+    setTimeout(() => document.getElementById('kbdHint').classList.remove('show'), 7000);
+
+    /* ============ INIT ============ */
+    initMaps();
+    detectLocation();
+    // Load real data from backend (non-blocking — works even if not yet authed)
+    setTimeout(() => {
+      loadRecentRequests();
+      loadEmergencyContacts();
+    }, 800);
+  </script>
+</body>
+
+</html>
